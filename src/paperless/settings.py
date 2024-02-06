@@ -420,18 +420,33 @@ if AUTO_LOGIN_USERNAME:
     # regular login in case the provided user does not exist.
     MIDDLEWARE.insert(_index + 1, "paperless.auth.AutoLoginMiddleware")
 
-ENABLE_HTTP_REMOTE_USER = __get_boolean("PAPERLESS_ENABLE_HTTP_REMOTE_USER")
-HTTP_REMOTE_USER_HEADER_NAME = os.getenv(
-    "PAPERLESS_HTTP_REMOTE_USER_HEADER_NAME",
-    "HTTP_REMOTE_USER",
-)
 
-if ENABLE_HTTP_REMOTE_USER:
-    MIDDLEWARE.append("paperless.auth.HttpRemoteUserMiddleware")
-    AUTHENTICATION_BACKENDS.insert(0, "django.contrib.auth.backends.RemoteUserBackend")
-    REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"].append(
-        "rest_framework.authentication.RemoteUserAuthentication",
+def _parse_remote_user_settings() -> str:
+    global MIDDLEWARE, AUTHENTICATION_BACKENDS, REST_FRAMEWORK
+    enable = __get_boolean("PAPERLESS_ENABLE_HTTP_REMOTE_USER")
+    enable_api = __get_boolean("PAPERLESS_ENABLE_HTTP_REMOTE_USER_API")
+    if enable or enable_api:
+        MIDDLEWARE.append("paperless.auth.HttpRemoteUserMiddleware")
+        AUTHENTICATION_BACKENDS.insert(
+            0,
+            "django.contrib.auth.backends.RemoteUserBackend",
+        )
+
+    if enable_api:
+        REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"].insert(
+            0,
+            "paperless.auth.PaperlessRemoteUserAuthentication",
+        )
+
+    header_name = os.getenv(
+        "PAPERLESS_HTTP_REMOTE_USER_HEADER_NAME",
+        "HTTP_REMOTE_USER",
     )
+
+    return header_name
+
+
+HTTP_REMOTE_USER_HEADER_NAME = _parse_remote_user_settings()
 
 # X-Frame options for embedded PDF display:
 X_FRAME_OPTIONS = "ANY" if DEBUG else "SAMEORIGIN"
@@ -615,6 +630,7 @@ LANGUAGES = [
     ("fr-fr", _("French")),
     ("hu-hu", _("Hungarian")),
     ("it-it", _("Italian")),
+    ("ja-jp", _("Japanese")),
     ("lb-lu", _("Luxembourgish")),
     ("no-no", _("Norwegian")),
     ("nl-nl", _("Dutch")),
@@ -746,10 +762,19 @@ CELERY_BEAT_SCHEDULE_FILENAME = os.path.join(DATA_DIR, "celerybeat-schedule.db")
 # django setting.
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "BACKEND": os.environ.get(
+            "PAPERLESS_CACHE_BACKEND",
+            "django.core.cache.backends.redis.RedisCache",
+        ),
         "LOCATION": _CHANNELS_REDIS_URL,
+        "KEY_PREFIX": os.getenv("PAPERLESS_REDIS_PREFIX", ""),
     },
 }
+
+if DEBUG and os.getenv("PAPERLESS_CACHE_BACKEND") is None:
+    CACHES["default"][
+        "BACKEND"
+    ] = "django.core.cache.backends.locmem.LocMemCache"  # pragma: no cover
 
 
 def default_threads_per_worker(task_workers) -> int:
@@ -832,6 +857,19 @@ CONSUMER_BARCODE_UPSCALE: Final[float] = __get_float(
 )
 
 CONSUMER_BARCODE_DPI: Final[int] = __get_int("PAPERLESS_CONSUMER_BARCODE_DPI", 300)
+
+CONSUMER_ENABLE_TAG_BARCODE: Final[bool] = __get_boolean(
+    "PAPERLESS_CONSUMER_ENABLE_TAG_BARCODE",
+)
+
+CONSUMER_TAG_BARCODE_MAPPING = dict(
+    json.loads(
+        os.getenv(
+            "PAPERLESS_CONSUMER_TAG_BARCODE_MAPPING",
+            '{"TAG:(.*)": "\\\\g<1>"}',
+        ),
+    ),
+)
 
 CONSUMER_ENABLE_COLLATE_DOUBLE_SIDED: Final[bool] = __get_boolean(
     "PAPERLESS_CONSUMER_ENABLE_COLLATE_DOUBLE_SIDED",

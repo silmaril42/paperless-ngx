@@ -34,6 +34,8 @@ matcher.
         `redis://<username>:<password>@<host>:<port>`
     -   With the requirepass option PAPERLESS_REDIS =
         `redis://:<password>@<host>:<port>`
+    -   To include the redis database index PAPERLESS_REDIS =
+        `redis://<username>:<password>@<host>:<port>/<DBIndex>`
 
     [More information on securing your Redis
     Instance](https://redis.io/docs/getting-started/#securing-redis).
@@ -463,9 +465,21 @@ applications.
 
     Defaults to "false" which disables this feature.
 
+#### [`PAPERLESS_ENABLE_HTTP_REMOTE_USER_API=<bool>`](#PAPERLESS_ENABLE_HTTP_REMOTE_USER_API) {#PAPERLESS_ENABLE_HTTP_REMOTE_USER_API}
+
+: Allows authentication via HTTP_REMOTE_USER directly against the API
+
+    !!! warning
+
+        See the warning above about securing your installation when using remote user header authentication. This setting is separate from
+        `PAPERLESS_ENABLE_HTTP_REMOTE_USER` to avoid introducing a security vulnerability to existing reverse proxy setups. As above,
+        ensure that your reverse proxy does not simply pass the `Remote-User` header from the internet to paperless.
+
+    Defaults to "false" which disables this feature.
+
 #### [`PAPERLESS_HTTP_REMOTE_USER_HEADER_NAME=<str>`](#PAPERLESS_HTTP_REMOTE_USER_HEADER_NAME) {#PAPERLESS_HTTP_REMOTE_USER_HEADER_NAME}
 
-: If "PAPERLESS_ENABLE_HTTP_REMOTE_USER" is enabled, this
+: If "PAPERLESS_ENABLE_HTTP_REMOTE_USER" or `PAPERLESS_ENABLE_HTTP_REMOTE_USER_API` are enabled, this
 property allows to customize the name of the HTTP header from which
 the authenticated username is extracted. Values are in terms of
 [HttpRequest.META](https://docs.djangoproject.com/en/4.1/ref/request-response/#django.http.HttpRequest.META).
@@ -1050,8 +1064,10 @@ system changes with `inotify`.
 
 #### [`PAPERLESS_CONSUMER_POLLING_RETRY_COUNT=<num>`](#PAPERLESS_CONSUMER_POLLING_RETRY_COUNT) {#PAPERLESS_CONSUMER_POLLING_RETRY_COUNT}
 
-: If consumer polling is enabled, sets the number of times paperless
-will check for a file to remain unmodified.
+: If consumer polling is enabled, sets the maximum number of times
+paperless will check for a file to remain unmodified. If a file's
+modification time and size are identical for two consecutive checks, it
+will be consumed.
 
     Defaults to 5.
 
@@ -1059,7 +1075,7 @@ will check for a file to remain unmodified.
 
 : If consumer polling is enabled, sets the delay in seconds between
 each check (above) paperless will do while waiting for a file to
-remain unmodified.
+remain unmodified. 
 
     Defaults to 5.
 
@@ -1159,6 +1175,55 @@ fails a bigger dpi value i.e. 600 can fix the issue. Try using in
 combination with PAPERLESS_CONSUMER_BARCODE_UPSCALE bigger than 1.0.
 
     Defaults to "300"
+
+#### [`PAPERLESS_CONSUMER_ENABLE_TAG_BARCODE=<bool>`](#PAPERLESS_CONSUMER_ENABLE_TAG_BARCODE) {#PAPERLESS_CONSUMER_ENABLE_TAG_BARCODE}
+
+: Enables the detection of barcodes in the scanned document and
+assigns or creates tags if a properly formatted barcode is detected.
+
+    The barcode must match one of the (configurable) regular expressions.
+    If the barcode text contains ',' (comma), it is split into multiple
+    barcodes which are individually processed for tagging.
+
+    Matching is case insensitive.
+
+    Defaults to false.
+
+#### [`PAPERLESS_CONSUMER_TAG_BARCODE_MAPPING=<json dict>`](#PAPERLESS_CONSUMER_TAG_BARCODE_MAPPING) {#PAPERLESS_CONSUMER_TAG_BARCODE_MAPPING}
+
+: Defines a dictionary of filter regex and substitute expressions.
+
+    Syntax: {"<regex>": "<substitute>" [,...]]}
+
+    A barcode is considered for tagging if the barcode text matches
+    at least one of the provided <regex> pattern.
+
+    If a match is found, the <substitute> rule is applied. This allows very
+    versatile reformatting and mapping of barcode pattern to tag values.
+
+    If a tag is not found it will be created.
+
+    Defaults to:
+
+    {"TAG:(.*)": "\\g<1>"} which defines
+    - a regex TAG:(.*) which includes barcodes beginning with TAG:
+      followed by any text that gets stored into match group #1 and
+    - a substitute \\g<1> that replaces the original barcode text
+      by the content in match group #1.
+    Consequently, the tag is the barcode text without its TAG: prefix.
+
+    More examples:
+
+    {"ASN12.*": "JOHN", "ASN13.*": "SMITH"} for example maps
+    - ASN12nnnn barcodes to the tag JOHN and
+    - ASN13nnnn barcodes to the tag SMITH.
+
+    {"T-J": "JOHN", "T-S": "SMITH", "T-D": "DOE"} directly maps
+    - T-J barcodes to the tag JOHN,
+    - T-S barcodes to the tag SMITH and
+    - T-D barcodes to the tag DOE.
+
+    Please refer to the Python regex documentation for more information.
 
 ## Audit Trail
 
@@ -1329,6 +1394,12 @@ specified as "chi-tra".
 started by the container.
 
     You can read more about this in the [advanced documentation](advanced_usage.md#celery-monitoring).
+
+#### [`PAPERLESS_SUPERVISORD_WORKING_DIR=<defined>`](#PAPERLESS_SUPERVISORD_WORKING_DIR) {#PAPERLESS_SUPERVISORD_WORKING_DIR}
+
+: If this environment variable is defined, the `supervisord.log` and `supervisord.pid` file will be created under the specified path in `PAPERLESS_SUPERVISORD_WORKING_DIR`. Setting `PAPERLESS_SUPERVISORD_WORKING_DIR=/tmp` and `PYTHONPYCACHEPREFIX=/tmp/pycache` would allow paperless to work on a read-only filesystem.
+
+    Please take note that the `PAPERLESS_DATA_DIR` and `PAPERLESS_MEDIA_ROOT` paths still have to be writable, just like the `PAPERLESS_SUPERVISORD_WORKING_DIR`. The can be archived by using bind or volume mounts. Only works in the container is run as user *paperless*
 
 ## Frontend Settings
 
