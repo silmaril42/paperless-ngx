@@ -1063,8 +1063,10 @@ system changes with `inotify`.
 
 #### [`PAPERLESS_CONSUMER_POLLING_RETRY_COUNT=<num>`](#PAPERLESS_CONSUMER_POLLING_RETRY_COUNT) {#PAPERLESS_CONSUMER_POLLING_RETRY_COUNT}
 
-: If consumer polling is enabled, sets the number of times paperless
-will check for a file to remain unmodified.
+: If consumer polling is enabled, sets the maximum number of times
+paperless will check for a file to remain unmodified. If a file's
+modification time and size are identical for two consecutive checks, it
+will be consumed.
 
     Defaults to 5.
 
@@ -1072,7 +1074,7 @@ will check for a file to remain unmodified.
 
 : If consumer polling is enabled, sets the delay in seconds between
 each check (above) paperless will do while waiting for a file to
-remain unmodified.
+remain unmodified. 
 
     Defaults to 5.
 
